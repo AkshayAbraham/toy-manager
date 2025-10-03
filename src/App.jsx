@@ -1,38 +1,47 @@
+// src/App.jsx
 import { useEffect, useState } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { supabase } from "./supabaseClient";
+import Login from "./Login";
+import ToyCollectionPage from "./ToyCollectionPage";
+import ToyForm from "./ToyForm";
 
 function App() {
-  const [toys, setToys] = useState([]);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const fetchToys = async () => {
-      let { data, error } = await supabase.from("toys").select("*");
-      if (error) {
-        console.error("Error fetching toys:", error);
-      } else {
-        console.log("Fetched toys:", data); // Check in console
-        setToys(data);
-      }
-    };
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) setUser(data.user);
+    });
 
-    fetchToys();
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+      }
+    );
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  if (!user) {
+    return <Login onLogin={setUser} />;
+  }
+
   return (
-    <div>
-      <h1>My Toy Collection</h1>
-      {toys.length === 0 ? (
-        <p>No toys found</p>
-      ) : (
-        <ul>
-          {toys.map((toy) => (
-            <li key={toy.id}>{toy.name}</li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<ToyCollectionPage onLogout={handleLogout} />} />
+        <Route path="/add-toy" element={<ToyForm />} />
+      </Routes>
+    </Router>
   );
 }
-
 
 export default App;
