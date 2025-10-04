@@ -102,7 +102,7 @@ export default function ToyCollectionPage({ onLogout }) {
 
   // View toy handler
   const handleViewToy = (toyId) => {
-    console.log(`POW! Viewing details for toy ID: ${toyId}`);
+    navigate(`/toy/${toyId}`);
   };
 
   // Format currency
@@ -209,7 +209,8 @@ export default function ToyCollectionPage({ onLogout }) {
             padding: '15px',
             textAlign: 'center',
             boxShadow: '4px 4px 0 #000',
-            fontFamily: "'Comic Sans MS', cursive, sans-serif"
+            fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
+            textTransform: 'uppercase', 
           }}>
             <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '5px' }}>
               🎯
@@ -235,7 +236,8 @@ export default function ToyCollectionPage({ onLogout }) {
             padding: '15px',
             textAlign: 'center',
             boxShadow: '4px 4px 0 #000',
-            fontFamily: "'Comic Sans MS', cursive, sans-serif"
+            fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
+            textTransform: 'uppercase', 
           }}>
             <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '5px' }}>
               📈
@@ -261,7 +263,8 @@ export default function ToyCollectionPage({ onLogout }) {
             padding: '15px',
             textAlign: 'center',
             boxShadow: '4px 4px 0 #000',
-            fontFamily: "'Comic Sans MS', cursive, sans-serif"
+            fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
+            textTransform: 'uppercase', 
           }}>
             <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '5px' }}>
               🚀
@@ -287,7 +290,8 @@ export default function ToyCollectionPage({ onLogout }) {
             padding: '15px',
             textAlign: 'center',
             boxShadow: '4px 4px 0 #000',
-            fontFamily: "'Comic Sans MS', cursive, sans-serif"
+            fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
+            textTransform: 'uppercase', 
           }}>
             <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '5px' }}>
               💰
@@ -440,7 +444,7 @@ export default function ToyCollectionPage({ onLogout }) {
                     fontSize: '10px',
                     fontWeight: 'bold',
                     border: '2px solid #000',
-                    fontFamily: "'Comic Sans MS', cursive",
+                    fontFamily: "'Bangers', cursive",
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
                     zIndex: 2,
@@ -477,7 +481,8 @@ export default function ToyCollectionPage({ onLogout }) {
                 fontWeight: 'bold',
                 marginBottom: '8px',
                 border: '2px solid #000',
-                fontFamily: "'Comic Sans MS', cursive",
+                fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
+                textTransform: 'uppercase', 
               }}>
                 📺 {toy.series}
               </div>
@@ -495,7 +500,8 @@ export default function ToyCollectionPage({ onLogout }) {
                   fontWeight: 'bold',
                   marginBottom: '8px',
                   border: '2px solid #000',
-                  fontFamily: "'Comic Sans MS', cursive",
+                  fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
+                  textTransform: 'uppercase', 
                 }}
               >
                 📸 +{toy.additionalImages.length} more

@@ -5,6 +5,7 @@ import { supabase } from "./supabaseClient";
 import Login from "./Login";
 import ToyCollectionPage from "./ToyCollectionPage";
 import ToyForm from "./ToyForm";
+import ToyDetailsPage from "./ToyDetailsPage";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -39,6 +40,7 @@ function App() {
       <Routes>
         <Route path="/" element={<ToyCollectionPage onLogout={handleLogout} />} />
         <Route path="/add-toy" element={<ToyForm />} />
+        <Route path="/toy/:toyId" element={<ToyDetailsPage />} />
       </Routes>
     </Router>
   );

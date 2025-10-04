@@ -1,0 +1,335 @@
+/*
+ * 🚨 IMPORTANT: All global styles (font-imports, keyframes, body background)
+ * have been REMOVED from this file because they are already correctly defined
+ * in index.html and index.css. This prevents mobile overrides.
+ */
+
+.toy-page {
+  /* Only keep the necessary component-specific styling and layout properties */
+  min-height: 100vh;
+  /* Font, background, and animation are inherited from the <body> in index.css */
+  overflow: hidden;
+}
+
+.toy-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fffbe6;
+  border-bottom: 3px solid #000;
+  box-shadow: 0 4px 0 #000;
+  padding: 8px 18px;
+}
+
+/* Uses Bangers (as loaded by index.html) */
+.toy-logo {
+  font-family: "Bangers", cursive;
+  font-size: 22px;
+}
+
+/* Uses Bangers */
+.back-btn {
+  background: #33ccff;
+  border: 3px solid #000;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-family: "Bangers", cursive;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 #000;
+}
+
+.toy-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.toy-content {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+@media (min-width: 1024px) {
+  .toy-content {
+    flex-direction: row;
+    height: calc(100vh - 80px);
+  }
+
+  .gallery-section {
+    width: 40%;
+    position: sticky;
+    top: 10px;
+  }
+
+  .details-section {
+    width: 60%;
+    overflow-y: auto;
+    padding-right: 10px;
+    padding-bottom: 40px; /* extra bottom padding for buttons */
+  }
+
+  .details-section::-webkit-scrollbar {
+    display: none;
+  }
+  .details-section {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* slightly smaller main image */
+.main-image-container {
+  background: #fff;
+  border: 4px solid #000;
+  border-radius: 20px;
+  padding: 8px;
+  box-shadow: 6px 6px 0 #000;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-height: 400px;
+  overflow: hidden;
+}
+
+.main-image {
+  width: 85%;
+  height: 85%;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+/* thumbnails visible */
+.thumbnail-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.thumbnail {
+  width: 70px;
+  height: 70px;
+  border: 2px solid #000;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbnail.active {
+  transform: scale(1.1);
+  border-color: #ff4d4d;
+}
+
+/* Pause indicator style from the previous iteration */
+.pause-indicator {
+    text-align: center;
+    margin-top: 10px;
+    font-weight: bold;
+    color: #ff4d4d;
+    background: #fffbe6;
+    padding: 5px;
+    border-radius: 8px;
+    border: 2px solid #ff4d4d;
+    box-shadow: 2px 2px 0 #000;
+}
+
+
+/* comic-style type badge (Uses Bangers) */
+.comic-badge {
+  font-family: "Bangers", cursive;
+  font-size: 14px;
+  color: #000;
+  text-transform: uppercase;
+  text-shadow: 2px 2px #fff, 3px 3px 0 #000;
+  letter-spacing: 1px;
+  padding: 5px 12px;
+  border: 3px solid #000;
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 #000;
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 25px;
+}
+
+.info-card {
+  background: #fffbe6;
+  border: 3px solid #000;
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 4px 4px 0 #000;
+}
+
+.section {
+  background: #fffbe6;
+  border: 3px solid #000;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 4px 4px 0 #000;
+  margin-bottom: 25px;
+}
+
+.section:first-of-type {
+  margin-top: 40px;
+}
+
+/* buttons padding bottom */
+.action-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-bottom: 30px; /* add breathing space below */
+}
+
+/* Uses Bangers */
+.primary-btn,
+.secondary-btn {
+  flex: 1;
+  border: 3px solid #000;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-family: "Bangers", cursive;
+  cursor: pointer;
+  box-shadow: 4px 4px 0 #000;
+  transition: transform 0.1s ease;
+}
+
+.primary-btn {
+  background: #ffcc00;
+}
+
+.secondary-btn {
+  background: #33ccff;
+}
+
+.primary-btn:active,
+.secondary-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 #000;
+}
+
+/* Loading/Error Card Styles */
+.loading-card, .error-card {
+  background: #fffbe6;
+  border: 4px solid #000;
+  border-radius: 15px;
+  padding: 30px;
+  margin-top: 50px;
+  text-align: center;
+  box-shadow: 8px 8px 0 #ff4d4d;
+  /* Ensure these use the Bangers font if they contain titles */
+}
+
+.loading-icon {
+    font-size: 50px;
+    margin-top: 15px;
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-card {
+    box-shadow: 8px 8px 0 #ff4d4d;
+}
+
+.error-card button {
+    margin-top: 20px;
+    font-family: "Bangers", cursive;
+}
+
+/* --- DELETE MODAL STYLES --- */
+
+.modal-overlay {
+  /* This darkens and locks the background */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000; /* Ensure it is on top of everything */
+}
+
+.delete-warning-modal {
+  background: #fffbe6; /* Light yellow background */
+  border: 4px solid #000;
+  border-radius: 15px;
+  padding: 30px;
+  max-width: 90%;
+  width: 450px;
+  text-align: center;
+  box-shadow: 10px 10px 0 #ff4d4d; /* Red shadow for danger */
+  animation: popIn 0.3s ease-out;
+}
+
+.comic-warning-header {
+  font-family: "Bangers", cursive;
+  font-size: clamp(24px, 6vw, 36px);
+  color: #ff4d4d; /* Red text for danger */
+  margin-top: 0;
+  text-shadow: 2px 2px #000;
+}
+
+.comic-warning-message {
+  /* Use the loaded Google Font as the primary, and keep Comic Sans as a fallback */
+  font-family: 'Atma', "Comic Sans MS", cursive, sans-serif; 
+  font-size: 18px;
+  line-height: 1.4;
+  margin-bottom: 25px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+}
+
+/* Style for the Delete button in the modal */
+.modal-delete-btn {
+  background: #ff4d4d; /* Primary red color */
+}
+
+/* Style for the Cancel button in the modal */
+.modal-cancel-btn {
+  background: #33ccff; /* Blue for the secondary/cancel action */
+}
+
+/* Animation for the modal pop-in */
+@keyframes popIn {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Danger Button Style (The one replacing the "BACK" button) */
+.danger-btn {
+  /* Overrides primary-btn base style to make it red */
+  background: #ff4d4d !important; 
+  box-shadow: 4px 4px 0 #000;
+}
+
+.danger-btn:active {
+  background: #cc3939 !important; /* Darker red on click */
+}
