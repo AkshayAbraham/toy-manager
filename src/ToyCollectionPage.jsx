@@ -138,9 +138,11 @@ export default function ToyCollectionPage({ onLogout }) {
       style={{
         minHeight: "100vh",
         background: "linear-gradient(135deg, #ff4d4d, #ffd633, #33ccff)",
-        backgroundSize: "400% 400%",
-        animation: "gradientShift 12s ease infinite",
+        backgroundSize: "200% 200%", // Reduced from 400% for better mobile performance
+        animation: "gradientShift 8s ease infinite", // Reduced duration
         paddingBottom: "80px",
+        WebkitBackgroundSize: "200% 200%", // Safari specific
+        MozBackgroundSize: "200% 200%", // Firefox specific
       }}
     >
       {/* Header */}
@@ -575,7 +577,7 @@ export default function ToyCollectionPage({ onLogout }) {
         +
       </button>
 
-      {/* Gradient animation and hover effect CSS */}
+      {/* Improved Gradient animation and hover effect CSS */}
       <style>
         {`
           @keyframes gradientShift {
@@ -584,21 +586,46 @@ export default function ToyCollectionPage({ onLogout }) {
             100% { background-position: 0% 50%; }
           }
           
+          /* Mobile-specific optimizations */
+          @media (max-width: 768px) {
+            body {
+              -webkit-font-smoothing: antialiased;
+              -moz-osx-font-smoothing: grayscale;
+            }
+          }
+          
+          /* Force hardware acceleration for better performance */
+          .toy-card-item {
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            -moz-transform: translateZ(0);
+            -ms-transform: translateZ(0);
+            -o-transform: translateZ(0);
+          }
+          
           .toy-card-item:hover {
-            transform: scale(1.05) rotate(-1deg);
+            transform: scale(1.05) rotate(-1deg) translateZ(0);
+            -webkit-transform: scale(1.05) rotate(-1deg) translateZ(0);
             box-shadow: 10px 10px 0 #ff4d4d;
             z-index: 10;
           }
           
           .toy-card-item button:active {
-            transform: translate(2px, 2px);
+            transform: translate(2px, 2px) translateZ(0);
+            -webkit-transform: translate(2px, 2px) translateZ(0);
             box-shadow: 1px 1px 0 #000;
           }
 
           /* Stats cards hover effect */
           .stats-card:hover {
-            transform: translateY(-2px);
+            transform: translateY(-2px) translateZ(0);
+            -webkit-transform: translateY(-2px) translateZ(0);
             box-shadow: 6px 6px 0 #000;
+          }
+          
+          /* Ensure gradient animation works on all browsers */
+          body {
+            background-attachment: fixed;
           }
         `}
       </style>

@@ -309,11 +309,16 @@ export default function ToyDetailsPage() {
             {labels.length > 0 && (
               <div className="section">
                 <h3>🏷️ TAGS</h3>
-                <div className="labels">
+                <div className="comic-tags-container">
                   {labels.map((label, i) => (
-                    <span key={i} className="label">
-                      {label}
-                    </span>
+                    <div key={i} className="comic-tag">
+                      <span className="comic-tag-text">#{label}</span>
+                      <div className="comic-tag-sparkle">✨</div>
+                      <div className="comic-tag-corner comic-tag-corner-tl"></div>
+                      <div className="comic-tag-corner comic-tag-corner-tr"></div>
+                      <div className="comic-tag-corner comic-tag-corner-bl"></div>
+                      <div className="comic-tag-corner comic-tag-corner-br"></div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -330,10 +335,20 @@ export default function ToyDetailsPage() {
               Object.keys(toy.custom_fields).length > 0 && (
                 <div className="section">
                   <h3>🔧 CUSTOM SPECS</h3>
-                  <div className="custom-fields">
-                    {Object.entries(toy.custom_fields).map(([k, v]) => (
-                      <div key={k} className="custom-field">
-                        <strong>{k}:</strong> {v}
+                  <div className="comic-specs-grid">
+                    {Object.entries(toy.custom_fields).map(([key, value]) => (
+                      <div key={key} className="comic-spec-card">
+                        <div className="comic-spec-header">
+                          <span className="comic-spec-key">⚡ {key}</span>
+                          <div className="comic-connector"></div>
+                        </div>
+                        <div className="comic-spec-value">
+                          {value}
+                        </div>
+                        <div className="comic-corner comic-corner-tl"></div>
+                        <div className="comic-corner comic-corner-tr"></div>
+                        <div className="comic-corner comic-corner-bl"></div>
+                        <div className="comic-corner comic-corner-br"></div>
                       </div>
                     ))}
                   </div>

@@ -15,6 +15,7 @@ export default function ToyForm() {
   const [existingToy, setExistingToy] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [tagInput, setTagInput] = useState("");
 
   const navigate = useNavigate();
   const { toyId } = useParams();
@@ -102,6 +103,36 @@ export default function ToyForm() {
   
   const removeAdditionalImage = (index) => setAdditionalImages(additionalImages.filter((_, i) => i !== index));
 
+  // Improved tag handling functions
+  const handleTagInputChange = (e) => {
+    setTagInput(e.target.value);
+  };
+
+  const handleTagInputKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addCurrentTag();
+    }
+  };
+
+  const addCurrentTag = () => {
+    const newTag = tagInput.trim();
+    if (newTag && !selectedLabels.includes(newTag)) {
+      setSelectedLabels([...selectedLabels, newTag]);
+      setTagInput("");
+    }
+  };
+
+  const removeTag = (tagToRemove) => {
+    setSelectedLabels(selectedLabels.filter(tag => tag !== tagToRemove));
+  };
+
+  const addTagFromSuggestion = (tag) => {
+    if (!selectedLabels.includes(tag)) {
+      setSelectedLabels([...selectedLabels, tag]);
+    }
+  };
+
   // Delete images from both storage and database
   const removeExistingAdditionalImage = async (imageId, imageUrl) => {
     if (!window.confirm("Are you sure you want to permanently remove this image?")) return;
@@ -171,6 +202,7 @@ export default function ToyForm() {
     setSelectedLabels([]);
     setPrimaryImage(null);
     setAdditionalImages([]);
+    setTagInput("");
   };
 
   const handleCancel = () => {
@@ -357,7 +389,54 @@ export default function ToyForm() {
     }
   };
 
-  if (isLoading && isEditMode) return <div className="toyform-page">Loading...</div>;
+  // Comic-style loading component
+  if (isLoading && isEditMode) {
+    return (
+      <div className="toyform-page">
+        <div className="toyform-container">
+          <div className="comic-loading-container">
+            <div className="comic-loading-card">
+              <div className="comic-loading-header">
+                <h2>🔄 MISSION BRIEFING IN PROGRESS...</h2>
+              </div>
+              
+              <div className="comic-loading-content">
+                <div className="comic-spinner">
+                  <div className="spinner-emoji">🎮</div>
+                  <div className="spinner-emoji">🎯</div>
+                  <div className="spinner-emoji">🚀</div>
+                  <div className="spinner-emoji">💥</div>
+                </div>
+                
+                <div className="comic-loading-text">
+                  <p className="loading-title">PREPARING TOY DATA FOR MISSION</p>
+                  <p className="loading-subtitle">Loading intel from ToyVerse HQ...</p>
+                </div>
+
+                <div className="comic-progress">
+                  <div className="progress-bar">
+                    <div className="progress-fill"></div>
+                  </div>
+                  <div className="progress-text">DECRYPTING TOY SPECS...</div>
+                </div>
+
+                <div className="comic-tips">
+                  <div className="tip-bubble">💡 TIP: Make sure all fields are filled for maximum toy power!</div>
+                </div>
+              </div>
+
+              <div className="comic-loading-corners">
+                <div className="corner corner-tl"></div>
+                <div className="corner corner-tr"></div>
+                <div className="corner corner-bl"></div>
+                <div className="corner corner-br"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="toyform-page">
@@ -465,9 +544,44 @@ export default function ToyForm() {
           ))}
           <button type="button" onClick={addCustomField} className="btn secondary">✨ Add Custom Field</button>
 
-          <h4 className="toyform-subheader">Tags & Categories</h4>
-          <input placeholder="Comma-separated labels (e.g., Vinyl, Limited Edition, Exclusive)" value={selectedLabels.join(", ")} onChange={(e) => setSelectedLabels(e.target.value.split(",").map((l) => l.trim()))} className="input"/>
-          {labels.length > 0 && (<p className="labels-existing">Existing: {labels.slice(0, 5).map((l) => l.name).join(", ")}{labels.length > 5 ? "..." : ""}</p>)}
+          <h4 className="toyform-subheader">🏷️ Tags & Categories</h4>
+          <div className="tags-input-container">
+            <div className="selected-tags">
+              {selectedLabels.map((tag, index) => (
+                <span key={index} className="tag-pill">
+                  {tag}
+                  <button 
+                    type="button" 
+                    onClick={() => removeTag(tag)} 
+                    className="tag-remove"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <input
+              placeholder="Type tag and press Enter or comma to add (e.g., Vinyl, Limited Edition)"
+              value={tagInput}
+              onChange={handleTagInputChange}
+              onKeyDown={handleTagInputKeyDown}
+              className="input"
+            />
+            <div className="tag-suggestions">
+              <p>💡 Quick add: 
+                {labels.slice(0, 6).map((label) => (
+                  <button
+                    key={label.id}
+                    type="button"
+                    className="tag-suggestion"
+                    onClick={() => addTagFromSuggestion(label.name)}
+                  >
+                    {label.name}
+                  </button>
+                ))}
+              </p>
+            </div>
+          </div>
 
           <div className="button-container">
             <button type="button" onClick={handleCancel} className="btn cancel" disabled={isSubmitting}>❌ Cancel</button>
