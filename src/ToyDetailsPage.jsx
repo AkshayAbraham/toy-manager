@@ -15,8 +15,8 @@ export default function ToyDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [showDeleteWarning, setShowDeleteWarning] = useState(false); 
-  const pauseTimeoutRef = useRef(null); 
+  const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+  const pauseTimeoutRef = useRef(null);
 
   // --- Utility Functions ---
 
@@ -83,11 +83,9 @@ export default function ToyDetailsPage() {
     setShowDeleteWarning(true);
   };
   
-
-  // 💥 FIX: Removed the non-existent 'user_id' filter from the delete query.
   const executeDelete = async () => {
-    setLoading(true); 
-    setShowDeleteWarning(false); 
+    setLoading(true);
+    setShowDeleteWarning(false);
 
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -104,7 +102,7 @@ export default function ToyDetailsPage() {
       
     if (error) {
       console.error("Error deleting toy:", error);
-      setLoading(false); 
+      setLoading(false);
       alert("ERROR! Toy deletion failed: " + error.message + ". Check your Supabase RLS policies!");
     } else {
       // Success! Navigate back to the main collection page
@@ -259,6 +257,9 @@ export default function ToyDetailsPage() {
           {/* RIGHT: DETAILS SECTION */}
           <div className="details-section">
             <div className="toy-title-block">
+              {/* NOTE: Badge moved below the name/series */}
+              <h2 className="toy-name">{toy.name}</h2>
+              {toy.series && <p className="toy-series">📺 {toy.series}</p>}
               {toy.type && (
                 <div
                   className="type-badge comic-badge"
@@ -267,8 +268,6 @@ export default function ToyDetailsPage() {
                   {toy.type.toUpperCase()}
                 </div>
               )}
-              <h2 className="toy-name">{toy.name}</h2>
-              {toy.series && <p className="toy-series">📺 {toy.series}</p>}
             </div>
 
             <div className="info-grid">

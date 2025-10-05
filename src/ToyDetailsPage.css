@@ -683,3 +683,48 @@
     font-size: 0.75rem;
   }
 }
+
+.toy-title-block {
+    display: flex;
+    flex-direction: column; /* This is the key change for stacking */
+    margin-bottom: 25px;
+}
+
+
+/* --- TITLE BLOCK STYLES (MODIFIED TO FIX HEADER OVERLAP) --- */
+.toy-title-block {
+    display: flex; /* Activate flexbox */
+    flex-direction: column; /* Stack children vertically */
+    margin-bottom: 25px;
+    /* Ensure no absolute or fixed positioning leaks out */
+    position: relative; 
+}
+
+.toy-series {
+    margin-top: 0;
+    margin-bottom: 15px; /* Space between series and the badge */
+    font-size: 18px;
+    font-weight: 500;
+}
+
+/* comic-style type badge (Uses Bangers) */
+.comic-badge {
+    font-family: "Bangers", cursive;
+    font-size: 14px;
+    color: #000;
+    text-transform: uppercase;
+    text-shadow: 2px 2px #fff, 3px 3px 0 #000;
+    letter-spacing: 1px;
+    padding: 5px 12px;
+    border: 3px solid #000;
+    border-radius: 10px;
+    box-shadow: 4px 4px 0 #000;
+    align-self: flex-start; /* Aligns the badge to the left of the column */
+    margin-top: 5px; /* Add some margin above the badge */
+    
+    /* CRUCIAL FIX: Resetting positional properties that might be causing it to leak */
+    position: static; 
+    top: auto;
+    left: auto;
+}
+/* --- END TITLE BLOCK STYLES --- */

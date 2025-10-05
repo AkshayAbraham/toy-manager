@@ -1,7 +1,20 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
-import ToyForm from "./ToyForm";
 import { useNavigate } from "react-router-dom";
+import "./ToyCollectionPage.css";
+
+// Define the 1GB free tier limit in bytes (1024 * 1024 * 1024)
+const STORAGE_LIMIT_BYTES = 1073741824; 
+
+// Helper to format bytes into MB or GB
+const formatBytes = (bytes, decimals = 2) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
 
 export default function ToyCollectionPage({ onLogout }) {
   const [toys, setToys] = useState([]);
@@ -11,14 +24,70 @@ export default function ToyCollectionPage({ onLogout }) {
     totalToys: 0,
     monthlyToys: 0,
     totalValue: 0,
-    recentAdditions: 0
+    recentAdditions: 0,
   });
+  
+  const [bucketStorageUsed, setBucketStorageUsed] = useState(null); 
+  const [databaseStorageUsed, setDatabaseStorageUsed] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [user, setUser] = useState(null);
+
   const navigate = useNavigate();
 
-  // Fetch toys and stats
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    }
+
+    const fetchBucketStorageUsage = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_bucket_storage_usage', { 
+            bucket_name: 'toy-images'
+        });
+
+        if (!error && data !== null) {
+          setBucketStorageUsed(data);
+        } else {
+          console.error("Error fetching bucket storage usage:", error);
+          setBucketStorageUsed(0); 
+        }
+      } catch (e) {
+        console.error("RPC call failed:", e);
+        setBucketStorageUsed(0); 
+      }
+    };
+
+    const fetchDatabaseStorageUsage = async () => {
+      try {
+        const { data: dbData, error: dbError } = await supabase.rpc('get_database_size');
+        
+        if (!dbError && dbData) {
+          setDatabaseStorageUsed(dbData);
+        } else {
+          console.log("Using fallback database size estimation");
+          setDatabaseStorageUsed(5000000);
+        }
+      } catch (e) {
+        console.error("Error fetching database size:", e);
+        setDatabaseStorageUsed(5000000);
+      }
+    };
+
+    fetchUserData();
+    fetchBucketStorageUsage();
+    fetchDatabaseStorageUsage();
+
+    const intervalId = setInterval(() => {
+      fetchBucketStorageUsage();
+      fetchDatabaseStorageUsage();
+    }, 60000); 
+    
+    return () => clearInterval(intervalId);
+  }, []);
+
   useEffect(() => {
     const fetchToysAndStats = async () => {
-      // Fetch all toys
       const { data, error } = await supabase
         .from("toys")
         .select(
@@ -31,7 +100,7 @@ export default function ToyCollectionPage({ onLogout }) {
           series,
           type,
           toy_images ( image_url )
-        `
+          `
         )
         .order("created_at", { ascending: false });
 
@@ -48,8 +117,6 @@ export default function ToyCollectionPage({ onLogout }) {
         }));
         setToys(formatted);
         setFilteredToys(formatted);
-
-        // Calculate stats
         calculateStats(data);
       } else {
         console.error("Error fetching toys:", error);
@@ -59,7 +126,6 @@ export default function ToyCollectionPage({ onLogout }) {
     fetchToysAndStats();
   }, []);
 
-  // Calculate statistics
   const calculateStats = (toysData) => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -86,7 +152,6 @@ export default function ToyCollectionPage({ onLogout }) {
     });
   };
 
-  // Filter toys by search
   useEffect(() => {
     const results = toys.filter((t) =>
       t.name.toLowerCase().includes(search.toLowerCase())
@@ -94,18 +159,17 @@ export default function ToyCollectionPage({ onLogout }) {
     setFilteredToys(results);
   }, [search, toys]);
 
-  // Logout
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    if (onLogout) onLogout();
+    if (window.confirm("Are you sure you want to log out of ToyVerse?")) {
+      await supabase.auth.signOut();
+      if (onLogout) onLogout();
+    }
   };
 
-  // View toy handler
   const handleViewToy = (toyId) => {
     navigate(`/toy/${toyId}`);
   };
 
-  // Format currency
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -113,7 +177,6 @@ export default function ToyCollectionPage({ onLogout }) {
     }).format(amount);
   };
 
-  // Get badge color based on type
   const getTypeBadgeColor = (type) => {
     const typeColors = {
       'funko pop': '#ff4d4d',
@@ -133,402 +196,243 @@ export default function ToyCollectionPage({ onLogout }) {
     return typeColors[lowerType] || '#666666';
   };
 
+  const StorageStatusModal = () => {
+    const bucketPercentUsed = bucketStorageUsed !== null 
+      ? ((bucketStorageUsed / STORAGE_LIMIT_BYTES) * 100).toFixed(2) 
+      : 0;
+    
+    const databasePercentUsed = databaseStorageUsed !== null 
+      ? ((databaseStorageUsed / STORAGE_LIMIT_BYTES) * 100).toFixed(2) 
+      : 0;
+
+    const isBucketCloseToLimit = parseFloat(bucketPercentUsed) > 80;
+    const isDatabaseCloseToLimit = parseFloat(databasePercentUsed) > 80;
+
+    return (
+      <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+        <div className="storage-modal-content" onClick={(e) => e.stopPropagation()}>
+          <h2 className="modal-title">
+            👤 MISSION STATUS REPORT ⚙️
+          </h2>
+
+          <div style={{ marginBottom: '20px' }}>
+            <p style={{ margin: '5px 0', fontSize: '18px', fontWeight: 'bold' }}>
+              User ID: <span style={{ color: '#ff4d4d', wordBreak: 'break-all' }}>{user ? user.id.substring(0, 8) + '...' : 'N/A'}</span>
+            </p>
+            <p style={{ margin: '5px 0', fontSize: '18px', fontWeight: 'bold' }}>
+              Email: <span style={{ color: '#33ccff', wordBreak: 'break-all' }}>{user ? user.email : 'N/A'}</span>
+            </p>
+          </div>
+
+          {/* Bucket Storage Section */}
+          <div className="storage-section">
+            <h3 className="storage-title" style={{ color: isBucketCloseToLimit ? '#ff4d4d' : '#000' }}>
+              🖼️ IMAGE STORAGE: {isBucketCloseToLimit ? 'CRITICAL!' : 'OK'}
+            </h3>
+            
+            {bucketStorageUsed !== null ? (
+              <>
+                <p className="storage-usage">
+                  USAGE: <span style={{ color: '#000' }}>{formatBytes(bucketStorageUsed)}</span> / {formatBytes(STORAGE_LIMIT_BYTES)}
+                </p>
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill"
+                    style={{
+                      width: `${bucketPercentUsed}%`,
+                      backgroundColor: isBucketCloseToLimit ? '#ff4d4d' : '#33ccff',
+                    }}
+                  ></div>
+                  <span className="progress-text">
+                    {bucketPercentUsed}% USED
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p style={{ fontSize: '14px' }}>...Loading bucket storage...</p>
+            )}
+          </div>
+
+          {/* Database Storage Section */}
+          <div className="storage-section">
+            <h3 className="storage-title" style={{ color: isDatabaseCloseToLimit ? '#ff4d4d' : '#000' }}>
+              🗄️ DATABASE STORAGE: {isDatabaseCloseToLimit ? 'CRITICAL!' : 'OK'}
+            </h3>
+            
+            {databaseStorageUsed !== null ? (
+              <>
+                <p className="storage-usage">
+                  USAGE: <span style={{ color: '#000' }}>{formatBytes(databaseStorageUsed)}</span> / {formatBytes(STORAGE_LIMIT_BYTES)}
+                </p>
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill"
+                    style={{
+                      width: `${databasePercentUsed}%`,
+                      backgroundColor: isDatabaseCloseToLimit ? '#ff4d4d' : '#94ff33',
+                    }}
+                  ></div>
+                  <span className="progress-text">
+                    {databasePercentUsed}% USED
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p style={{ fontSize: '14px' }}>...Loading database storage...</p>
+            )}
+          </div>
+
+          {/* Total Usage Summary */}
+          <div className="total-usage">
+            <p className="total-usage-text">
+              🚀 TOTAL USAGE: {formatBytes((bucketStorageUsed || 0) + (databaseStorageUsed || 0))} / {formatBytes(STORAGE_LIMIT_BYTES)}
+            </p>
+          </div>
+          
+          <button className="logout-button" onClick={handleLogout}>
+            ❌ TERMINATE SESSION (LOGOUT)
+          </button>
+          
+          <button className="modal-close-button" onClick={() => setIsModalOpen(false)}>
+            X
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(135deg, #ff4d4d, #ffd633, #33ccff)",
-        backgroundSize: "200% 200%", // Reduced from 400% for better mobile performance
-        animation: "gradientShift 8s ease infinite", // Reduced duration
-        paddingBottom: "80px",
-        WebkitBackgroundSize: "200% 200%", // Safari specific
-        MozBackgroundSize: "200% 200%", // Firefox specific
-      }}
-    >
+    <div className="toy-collection-page">
       {/* Header */}
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          padding: "15px 20px",
-          background: "#fffbe6",
-          borderBottom: "3px solid #000",
-          boxShadow: "0 4px 0 #000",
-        }}
-      >
-        <h1
-          style={{
-            fontFamily: "'Bangers', 'Comic Sans MS', cursive, sans-serif",
-            fontSize: "clamp(22px, 5vw, 32px)",
-            margin: 0,
-            color: "#000",
-          }}
-        >
+      <header className="toy-collection-header">
+        <h1 className="toy-collection-title">
           <span style={{color: '#ff4d4d'}}>💥</span> ToyVerse
         </h1>
 
         <button
-          onClick={handleLogout}
-          style={{
-            background: "#ff4d4d",
-            border: "3px solid #000",
-            borderRadius: "50%",
-            width: '40px',
-            height: '40px',
-            lineHeight: '40px',
-            textAlign: 'center',
-            fontSize: "20px",
-            fontWeight: "bold",
-            cursor: "pointer",
-            boxShadow: "3px 3px 0 #000",
-            transition: 'all 0.1s',
-          }}
-          title="Logout"
+          className="user-status-button"
+          onClick={() => setIsModalOpen(true)}
+          title="User & Storage Status"
         >
           👤
+          {bucketStorageUsed !== null && databaseStorageUsed !== null && (
+            <span 
+              className="usage-badge"
+              style={{
+                background: ((bucketStorageUsed + databaseStorageUsed) / STORAGE_LIMIT_BYTES) > 0.8 ? '#ffcc00' : '#94ff33'
+              }}
+              title={`${(((bucketStorageUsed + databaseStorageUsed) / STORAGE_LIMIT_BYTES) * 100).toFixed(0)}% Total Used`}
+            >
+              %
+            </span>
+          )}
         </button>
       </header>
+      
+      {/* Storage Status Modal */}
+      {isModalOpen && <StorageStatusModal />}
 
       {/* Stats Section */}
-      <div style={{ 
-        padding: "15px 20px", 
-        background: "#fffbe6",
-        borderBottom: "3px solid #000"
-      }}>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-          gap: '15px',
-          maxWidth: '1200px',
-          margin: '0 auto'
-        }}>
-          {/* Total Toys */}
-          <div style={{
-            background: '#ffcc00',
-            border: '3px solid #000',
-            borderRadius: '12px',
-            padding: '15px',
-            textAlign: 'center',
-            boxShadow: '4px 4px 0 #000',
-            fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
-            textTransform: 'uppercase', 
-          }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '5px' }}>
-              🎯
-            </div>
-            <div style={{ 
-              fontSize: 'clamp(20px, 4vw, 24px)', 
-              fontWeight: 'bold',
-              fontFamily: "'Bangers', cursive",
-              marginBottom: '5px'
-            }}>
-              {stats.totalToys}
-            </div>
-            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
-              TOTAL TOYS
-            </div>
+      <div className="stats-section">
+        <div className="stats-grid">
+          <div className="stats-card" style={{ background: '#ffcc00' }}>
+            <div className="stats-card-icon">🎯</div>
+            <div className="stats-card-value">{stats.totalToys}</div>
+            <div className="stats-card-label">TOTAL TOYS</div>
           </div>
-
-          {/* Monthly Toys */}
-          <div style={{
-            background: '#33ccff',
-            border: '3px solid #000',
-            borderRadius: '12px',
-            padding: '15px',
-            textAlign: 'center',
-            boxShadow: '4px 4px 0 #000',
-            fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
-            textTransform: 'uppercase', 
-          }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '5px' }}>
-              📈
-            </div>
-            <div style={{ 
-              fontSize: 'clamp(20px, 4vw, 24px)', 
-              fontWeight: 'bold',
-              fontFamily: "'Bangers', cursive",
-              marginBottom: '5px'
-            }}>
-              {stats.monthlyToys}
-            </div>
-            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
-              THIS MONTH
-            </div>
+          <div className="stats-card" style={{ background: '#33ccff' }}>
+            <div className="stats-card-icon">📈</div>
+            <div className="stats-card-value">{stats.monthlyToys}</div>
+            <div className="stats-card-label">THIS MONTH</div>
           </div>
-
-          {/* Recent Additions */}
-          <div style={{
-            background: '#ff6b6b',
-            border: '3px solid #000',
-            borderRadius: '12px',
-            padding: '15px',
-            textAlign: 'center',
-            boxShadow: '4px 4px 0 #000',
-            fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
-            textTransform: 'uppercase', 
-          }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '5px' }}>
-              🚀
-            </div>
-            <div style={{ 
-              fontSize: 'clamp(20px, 4vw, 24px)', 
-              fontWeight: 'bold',
-              fontFamily: "'Bangers', cursive",
-              marginBottom: '5px'
-            }}>
-              {stats.recentAdditions}
-            </div>
-            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
-              LAST 7 DAYS
-            </div>
+          <div className="stats-card" style={{ background: '#ff6b6b' }}>
+            <div className="stats-card-icon">🚀</div>
+            <div className="stats-card-value">{stats.recentAdditions}</div>
+            <div className="stats-card-label">LAST 7 DAYS</div>
           </div>
-
-          {/* Collection Value */}
-          <div style={{
-            background: '#94ff33',
-            border: '3px solid #000',
-            borderRadius: '12px',
-            padding: '15px',
-            textAlign: 'center',
-            boxShadow: '4px 4px 0 #000',
-            fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
-            textTransform: 'uppercase', 
-          }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '5px' }}>
-              💰
-            </div>
-            <div style={{ 
-              fontSize: 'clamp(16px, 3vw, 20px)', 
-              fontWeight: 'bold',
-              fontFamily: "'Bangers', cursive",
-              marginBottom: '5px'
-            }}>
-              {formatCurrency(stats.totalValue)}
-            </div>
-            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
-              TOTAL VALUE
-            </div>
+          <div className="stats-card" style={{ background: '#94ff33' }}>
+            <div className="stats-card-icon">💰</div>
+            <div className="stats-card-value">{formatCurrency(stats.totalValue)}</div>
+            <div className="stats-card-label">TOTAL VALUE</div>
           </div>
         </div>
       </div>
 
       {/* Search Bar */}
-      <div style={{ padding: "15px 20px", background: "#fffbe6" }}>
+      <div className="search-section">
         <input
           type="text"
           placeholder="🔍 Search toys..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "12px 16px",
-            borderRadius: "12px",
-            border: "3px solid #000",
-            fontSize: "16px",
-            fontFamily: "'Comic Sans MS', cursive, sans-serif",
-            boxShadow: "3px 3px 0 #000",
-            maxWidth: '500px',
-            margin: '0 auto',
-            display: 'block'
-          }}
+          className="search-input"
         />
       </div>
 
       {/* Results Count */}
       {search && (
-        <div style={{
-          padding: "10px 20px",
-          background: "#fffbe6",
-          textAlign: 'center',
-          borderBottom: '2px dashed #000'
-        }}>
-          <span style={{
-            fontFamily: "'Bangers', cursive",
-            fontSize: '18px',
-            color: '#ff4d4d'
-          }}>
+        <div className="results-count">
+          <span className="results-text">
             🎯 {filteredToys.length} toy{filteredToys.length !== 1 ? 's' : ''} found for "{search}"
           </span>
         </div>
       )}
 
       {/* Toy List */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", 
-          gap: "20px",
-          padding: "20px",
-        }}
-      >
+      <div className="toy-grid">
         {filteredToys.map((toy) => (
           <div
             key={toy.id}
-            className="toy-card-item"
+            className="toy-card"
             onClick={() => handleViewToy(toy.id)}
-            style={{
-              background: "#fffbe6",
-              border: "4px solid #000",
-              borderRadius: "16px",
-              boxShadow: "6px 6px 0 #000",
-              padding: "10px",
-              textAlign: "center",
-              cursor: "pointer",
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-              transition: "transform 0.15s ease, box-shadow 0.15s ease",
-            }}
           >
-            {/* Image Container with Badge */}
-            <div style={{ position: 'relative', marginBottom: "10px" }}>
+            <div className="toy-image-container">
               {toy.image ? (
-                <div 
-                  style={{
-                    width: "100%",
-                    height: "140px",
-                    borderRadius: "12px",
-                    border: "2px solid #000",
-                    backgroundColor: '#f0f0f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
+                <div className="toy-image">
                   <img
                     src={toy.image}
                     alt={toy.name}
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      objectFit: "contain", 
-                      borderRadius: "10px", 
-                    }}
                     onError={(e) => {
                       e.target.src = 'https://placehold.co/200x200/ffcc00/000?text=No+Image';
                     }}
                   />
                 </div>
               ) : (
-                <div
-                  style={{
-                    width: "100%",
-                    height: "140px",
-                    borderRadius: "12px",
-                    border: "2px dashed #000",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontFamily: "'Bangers', cursive",
-                    fontSize: "16px",
-                    color: "#000",
-                    flexShrink: 0,
-                    backgroundColor: '#fff0f0',
-                  }}
-                >
+                <div className="toy-image-placeholder">
                   NO IMAGE!
                 </div>
               )}
-              
-              {/* Type Badge - Positioned on top of image */}
               {toy.type && (
                 <div
-                  style={{
-                    position: 'absolute',
-                    top: '8px',
-                    left: '8px',
-                    background: getTypeBadgeColor(toy.type),
-                    color: '#000',
-                    padding: '3px 8px',
-                    borderRadius: '8px',
-                    fontSize: '10px',
-                    fontWeight: 'bold',
-                    border: '2px solid #000',
-                    fontFamily: "'Bangers', cursive",
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    zIndex: 2,
-                    boxShadow: '2px 2px 0 #000',
-                  }}
+                  className="type-badge"
+                  style={{ background: getTypeBadgeColor(toy.type) }}
                 >
                   {toy.type}
                 </div>
               )}
             </div>
             
-            {/* Toy Name */}
-            <h3
-              style={{
-                fontFamily: "'Bangers', 'Comic Sans MS', cursive, sans-serif",
-                fontSize: "clamp(18px, 4vw, 24px)",
-                margin: '0 0 8px 0',
-                color: "#000",
-                flexGrow: 1,
-                lineHeight: '1.2'
-              }}
-            >
+            <h3 className="toy-name">
               {toy.name}
             </h3>
 
-            {/* Series Name */}
             {toy.series && (
-              <div style={{
-                background: '#33ccff',
-                color: '#000',
-                padding: '2px 8px',
-                borderRadius: '8px',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                marginBottom: '8px',
-                border: '2px solid #000',
-                fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
-                textTransform: 'uppercase', 
-              }}>
+              <div className="series-badge">
                 📺 {toy.series}
               </div>
             )}
 
-            {/* Additional Images Count */}
             {toy.additionalImages && toy.additionalImages.length > 0 && (
-              <div
-                style={{
-                  background: '#ffcc00',
-                  color: '#000',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  fontSize: '10px',
-                  fontWeight: 'bold',
-                  marginBottom: '8px',
-                  border: '2px solid #000',
-                  fontFamily: "'Atma', \"Comic Sans MS\", cursive, sans-serif",
-                  textTransform: 'uppercase', 
-                }}
-              >
+              <div className="images-count-badge">
                 📸 +{toy.additionalImages.length} more
               </div>
             )}
 
-            {/* View Button */}
             <button
+              className="view-button"
               onClick={(e) => {
                 e.stopPropagation();
                 handleViewToy(toy.id);
-              }}
-              style={{
-                background: "#33ccff",
-                color: "#000",
-                border: "3px solid #000",
-                borderRadius: "8px",
-                padding: "8px 0",
-                marginTop: 'auto',
-                fontSize: "18px",
-                fontWeight: "bold",
-                fontFamily: "'Bangers', cursive",
-                cursor: "pointer",
-                boxShadow: "3px 3px 0 #000",
-                transition: 'all 0.1s',
               }}
             >
               VIEW!
@@ -539,96 +443,12 @@ export default function ToyCollectionPage({ onLogout }) {
 
       {/* Floating Add Toy Button */}
       <button
+        className="add-toy-button"
         onClick={() => navigate("/add-toy")}
-        style={{
-          position: "fixed",
-          bottom: "20px",
-          right: "20px",
-          background: "#ffcc00",
-          border: "3px solid #000",
-          borderRadius: "50%",
-          width: "60px",
-          height: "60px",
-          fontSize: "28px",
-          fontWeight: "bold",
-          boxShadow: "6px 6px 0 #000",
-          cursor: "pointer",
-          zIndex: 999,
-          transition: "all 0.2s ease",
-        }}
-        onMouseEnter={(e) => {
-          e.target.style.transform = "scale(1.1)";
-          e.target.style.boxShadow = "8px 8px 0 #000";
-        }}
-        onMouseLeave={(e) => {
-          e.target.style.transform = "scale(1)";
-          e.target.style.boxShadow = "6px 6px 0 #000";
-        }}
-        onMouseDown={(e) => {
-          e.target.style.transform = "scale(0.95) translate(2px, 2px)";
-          e.target.style.boxShadow = "4px 4px 0 #000";
-        }}
-        onMouseUp={(e) => {
-          e.target.style.transform = "scale(1.1)";
-          e.target.style.boxShadow = "8px 8px 0 #000";
-        }}
         title="Add New Toy"
       >
         +
       </button>
-
-      {/* Improved Gradient animation and hover effect CSS */}
-      <style>
-        {`
-          @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-          }
-          
-          /* Mobile-specific optimizations */
-          @media (max-width: 768px) {
-            body {
-              -webkit-font-smoothing: antialiased;
-              -moz-osx-font-smoothing: grayscale;
-            }
-          }
-          
-          /* Force hardware acceleration for better performance */
-          .toy-card-item {
-            transform: translateZ(0);
-            -webkit-transform: translateZ(0);
-            -moz-transform: translateZ(0);
-            -ms-transform: translateZ(0);
-            -o-transform: translateZ(0);
-          }
-          
-          .toy-card-item:hover {
-            transform: scale(1.05) rotate(-1deg) translateZ(0);
-            -webkit-transform: scale(1.05) rotate(-1deg) translateZ(0);
-            box-shadow: 10px 10px 0 #ff4d4d;
-            z-index: 10;
-          }
-          
-          .toy-card-item button:active {
-            transform: translate(2px, 2px) translateZ(0);
-            -webkit-transform: translate(2px, 2px) translateZ(0);
-            box-shadow: 1px 1px 0 #000;
-          }
-
-          /* Stats cards hover effect */
-          .stats-card:hover {
-            transform: translateY(-2px) translateZ(0);
-            -webkit-transform: translateY(-2px) translateZ(0);
-            box-shadow: 6px 6px 0 #000;
-          }
-          
-          /* Ensure gradient animation works on all browsers */
-          body {
-            background-attachment: fixed;
-          }
-        `}
-      </style>
     </div>
   );
 }
