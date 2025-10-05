@@ -41,6 +41,7 @@ function App() {
         <Route path="/" element={<ToyCollectionPage onLogout={handleLogout} />} />
         <Route path="/add-toy" element={<ToyForm />} />
         <Route path="/toy/:toyId" element={<ToyDetailsPage />} />
+        <Route path="/edit-toy/:toyId" element={<ToyForm />} /> 
       </Routes>
     </Router>
   );

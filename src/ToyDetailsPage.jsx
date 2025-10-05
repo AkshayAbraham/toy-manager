@@ -82,6 +82,7 @@ export default function ToyDetailsPage() {
   const handleDeleteClick = () => {
     setShowDeleteWarning(true);
   };
+  
 
   // 💥 FIX: Removed the non-existent 'user_id' filter from the delete query.
   const executeDelete = async () => {
@@ -252,9 +253,7 @@ export default function ToyDetailsPage() {
                 ))}
               </div>
             )}
-            {isPaused && (
-                <p className="pause-indicator">⏸️ Slideshow Paused for 20s</p>
-            )}
+            
           </div>
 
           {/* RIGHT: DETAILS SECTION */}

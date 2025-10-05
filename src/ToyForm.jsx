@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "./supabaseClient";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import "./ToyForm.css";
 
 export default function ToyForm() {
   const [labels, setLabels] = useState([]);
@@ -8,195 +9,345 @@ export default function ToyForm() {
   const [customFields, setCustomFields] = useState([{ key: "", value: "" }]);
   const [primaryImage, setPrimaryImage] = useState(null);
   const [additionalImages, setAdditionalImages] = useState([]);
+  const [existingAdditionalImages, setExistingAdditionalImages] = useState([]);
+  const [existingPrimaryImageUrl, setExistingPrimaryImageUrl] = useState("");
+  const [deletedImageIds, setDeletedImageIds] = useState([]);
+  const [existingToy, setExistingToy] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch existing labels
+  const navigate = useNavigate();
+  const { toyId } = useParams();
+  const isEditMode = Boolean(toyId);
+
   useEffect(() => {
     const fetchLabels = async () => {
       const { data, error } = await supabase.from("labels").select("*");
       if (!error) setLabels(data);
     };
+
+    const fetchToyData = async () => {
+      if (!toyId) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        // Fetch toy data
+        const { data: toyData, error: toyError } = await supabase
+          .from("toys")
+          .select("*")
+          .eq("id", toyId)
+          .single();
+
+        if (toyError) throw toyError;
+
+        setExistingToy(toyData);
+        setExistingPrimaryImageUrl(toyData.primary_image_url || "");
+
+        // Fetch labels
+        const { data: toyLabels, error: labelsError } = await supabase
+          .from("toy_labels")
+          .select(`labels(name)`)
+          .eq("toy_id", toyId);
+
+        if (!labelsError && toyLabels) {
+          const labelNames = toyLabels.map(tl => tl.labels?.name).filter(Boolean);
+          setSelectedLabels(labelNames);
+        }
+
+        // Fetch additional images
+        const { data: additionalImagesData, error: imagesError } = await supabase
+          .from("toy_images")
+          .select("image_url, id")
+          .eq("toy_id", toyId);
+
+        if (!imagesError && additionalImagesData) {
+          setExistingAdditionalImages(additionalImagesData);
+        }
+
+        // Custom fields
+        if (toyData.custom_fields && typeof toyData.custom_fields === 'object') {
+          const fields = Object.entries(toyData.custom_fields).map(([key, value]) => ({
+            key,
+            value: String(value)
+          }));
+          setCustomFields(fields.length > 0 ? fields : [{ key: "", value: "" }]);
+        }
+
+      } catch (error) {
+        console.error("Error fetching toy data:", error);
+        alert("Error loading toy data");
+        navigate("/");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     fetchLabels();
-  }, []);
+    fetchToyData();
+  }, [toyId, navigate]);
 
-  // Add custom field input
-  const addCustomField = () => {
-    setCustomFields([...customFields, { key: "", value: "" }]);
-  };
-
-  // Update custom field input
+  const addCustomField = () => setCustomFields([...customFields, { key: "", value: "" }]);
+  
   const handleCustomFieldChange = (index, key, value) => {
     const newFields = [...customFields];
     newFields[index] = { ...newFields[index], [key]: value };
     setCustomFields(newFields);
   };
+  
+  const handlePrimaryImageChange = (e) => setPrimaryImage(e.target.files[0]);
+  
+  const handleAdditionalImagesChange = (e) => setAdditionalImages([...additionalImages, ...Array.from(e.target.files)]);
+  
+  const removeAdditionalImage = (index) => setAdditionalImages(additionalImages.filter((_, i) => i !== index));
 
-  // Handle primary image selection
-  const handlePrimaryImageChange = (e) => {
-    const file = e.target.files[0];
-    setPrimaryImage(file);
+  // Delete images from both storage and database
+  const removeExistingAdditionalImage = async (imageId, imageUrl) => {
+    if (!window.confirm("Are you sure you want to permanently remove this image?")) return;
+
+    try {
+      console.log("Starting image deletion for:", imageUrl);
+      
+      // Extract file path from URL
+      let filePath = '';
+      const url = new URL(imageUrl);
+      const pathSegments = url.pathname.split('/');
+      
+      // Find the index of 'toy-images' in the path
+      const toyImagesIndex = pathSegments.indexOf('toy-images');
+      if (toyImagesIndex !== -1) {
+        // Get everything after 'toy-images'
+        filePath = pathSegments.slice(toyImagesIndex + 1).join('/');
+      }
+
+      console.log("Extracted file path:", filePath);
+
+      if (!filePath) {
+        throw new Error("Could not extract file path from image URL");
+      }
+
+      // Delete from storage
+      console.log("Deleting from storage...");
+      const { error: storageError } = await supabase.storage
+        .from("toy-images")
+        .remove([filePath]);
+
+      if (storageError) {
+        console.error("Storage deletion error:", storageError);
+        // Continue with database deletion even if storage fails
+      } else {
+        console.log("Storage deletion successful");
+      }
+
+      // Delete from database
+      console.log("Deleting from database...");
+      const { error: dbError } = await supabase
+        .from("toy_images")
+        .delete()
+        .eq("id", imageId);
+
+      if (dbError) {
+        console.error("Database deletion error:", dbError);
+        throw new Error("Failed to delete image record from database: " + dbError.message);
+      }
+
+      console.log("Database deletion successful");
+
+      // Update local state immediately
+      setExistingAdditionalImages(prev => prev.filter(img => img.id !== imageId));
+      setDeletedImageIds(prev => [...prev, imageId]);
+
+      alert("✅ Image removed successfully!");
+
+    } catch (error) {
+      console.error("Error removing image:", error);
+      alert("❌ Error removing image: " + error.message);
+    }
   };
 
-  // Handle additional images selection
-  const handleAdditionalImagesChange = (e) => {
-    const files = Array.from(e.target.files);
-    setAdditionalImages([...additionalImages, ...files]);
+  const resetForm = () => {
+    setCustomFields([{ key: "", value: "" }]);
+    setSelectedLabels([]);
+    setPrimaryImage(null);
+    setAdditionalImages([]);
   };
 
-  // Remove additional image
-  const removeAdditionalImage = (index) => {
-    setAdditionalImages(additionalImages.filter((_, i) => i !== index));
+  const handleCancel = () => {
+    if (window.confirm("Are you sure you want to cancel? Any unsaved changes will be lost.")) {
+      navigate(isEditMode ? `/toy/${toyId}` : "/");
+    }
   };
 
-  // Submit form - FIXED VERSION
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      // Validate primary image
-      if (!primaryImage) {
-        alert("❌ Primary image is required! Please select a main image for your toy.");
+      // Validate primary image for new toys
+      if (!isEditMode && !primaryImage) {
+        alert("❌ Primary image is required!");
         setIsSubmitting(false);
         return;
       }
 
-      // Build JSON for custom fields
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert("You must be logged in to perform this action.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Form data
+      const formData = new FormData(e.target);
+      const formValues = {
+        name: formData.get('name') || '',
+        type: formData.get('type') || '',
+        series: formData.get('series') || '',
+        brand: formData.get('brand') || '',
+        code_number: formData.get('code_number') || '',
+        quantity: parseInt(formData.get('quantity')) || 1,
+        condition: formData.get('condition') || '',
+        color_variant: formData.get('color_variant') || '',
+        purchase_date: formData.get('purchase_date') || null,
+        price: formData.get('price') ? parseFloat(formData.get('price')) : null,
+        purchase_location: formData.get('purchase_location') || '',
+        notes: formData.get('notes') || '',
+      };
+
+      // Prepare custom fields
       const custom_fields_json = {};
-      customFields.forEach((f) => {
-        if (f.key) custom_fields_json[f.key] = f.value;
-      });
+      customFields.forEach((f) => { if (f.key && f.value) custom_fields_json[f.key] = f.value; });
 
-      // ✅ FIRST: Upload the primary image to get its URL
-      const primaryImagePath = `temp/${Date.now()}-${primaryImage.name}`;
-      const { error: primaryUploadError } = await supabase.storage
-        .from("toy-images")
-        .upload(primaryImagePath, primaryImage);
+      let primaryImageUrl = existingPrimaryImageUrl;
 
-      if (primaryUploadError) {
-        console.error("Primary image upload error:", primaryUploadError.message);
-        alert("Error uploading primary image. Please try again.");
-        setIsSubmitting(false);
-        return;
-      }
+      // Upload new primary image
+      if (primaryImage) {
+        const imagePath = isEditMode 
+          ? `${toyId}/primary-${Date.now()}-${primaryImage.name}`
+          : `temp/${Date.now()}-${primaryImage.name}`;
 
-      // Get public URL for primary image
-      const { data: primaryUrlData } = supabase.storage
-        .from("toy-images")
-        .getPublicUrl(primaryImagePath);
-
-      const primaryImageUrl = primaryUrlData.publicUrl;
-
-      // ✅ NOW: Insert toy WITH the primary image URL
-      const { data: toyData, error: toyError } = await supabase
-        .from("toys")
-        .insert([
-          {
-            name: e.target.name.value,
-            type: e.target.type.value,
-            series: e.target.series.value,
-            code_number: e.target.code_number.value,
-            purchase_date: e.target.purchase_date.value,
-            purchase_location: e.target.purchase_location.value,
-            price: e.target.price.value,
-            brand: e.target.brand.value,
-            condition: e.target.condition.value,
-            color_variant: e.target.color_variant.value,
-            quantity: e.target.quantity.value,
-            notes: e.target.notes.value,
-            custom_fields: custom_fields_json,
-            primary_image_url: primaryImageUrl, // ✅ Now included in the initial insert
-          },
-        ])
-        .select()
-        .single();
-
-      if (toyError) {
-        // Clean up the uploaded image if toy insertion fails
-        await supabase.storage.from("toy-images").remove([primaryImagePath]);
-        alert("Error adding toy: " + toyError.message);
-        setIsSubmitting(false);
-        return;
-      }
-
-      const toyId = toyData.id;
-
-      // ✅ Move the primary image to the correct toy folder
-      const newPrimaryImagePath = `${toyId}/primary-${Date.now()}-${primaryImage.name}`;
-      const { data: moveData, error: moveError } = await supabase.storage
-        .from("toy-images")
-        .move(primaryImagePath, newPrimaryImagePath);
-
-      if (moveError) {
-        console.error("Error moving primary image:", moveError);
-        // Continue anyway, the image is already uploaded
-      } else {
-        // Update the toy with the new path if move was successful
-        const { data: newPrimaryUrlData } = supabase.storage
+        const { error: primaryUploadError } = await supabase.storage
           .from("toy-images")
-          .getPublicUrl(newPrimaryImagePath);
+          .upload(imagePath, primaryImage);
 
-        await supabase
-          .from("toys")
-          .update({ primary_image_url: newPrimaryUrlData.publicUrl })
-          .eq("id", toyId);
-      }
-
-      // ✅ Upload ADDITIONAL IMAGES
-      for (let file of additionalImages) {
-        const filePath = `${toyId}/additional-${Date.now()}-${file.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("toy-images")
-          .upload(filePath, file);
-
-        if (uploadError) {
-          console.error("Additional image upload error:", uploadError.message);
-          continue;
+        if (primaryUploadError) {
+          alert("Error uploading primary image. Please try again.");
+          setIsSubmitting(false);
+          return;
         }
 
-        const { data: publicUrlData } = supabase.storage
-          .from("toy-images")
-          .getPublicUrl(filePath);
+        const { data: primaryUrlData } = supabase.storage.from("toy-images").getPublicUrl(imagePath);
+        primaryImageUrl = primaryUrlData.publicUrl;
+      }
 
-        const publicUrl = publicUrlData.publicUrl;
+      if (isEditMode) {
+        // Update toy
+        const updateData = {
+          ...formValues,
+          custom_fields: custom_fields_json,
+          updated_at: new Date().toISOString(),
+        };
+        if (primaryImage) updateData.primary_image_url = primaryImageUrl;
 
-        // Save additional image URL in toy_images table
-        await supabase.from("toy_images").insert([
-          { 
-            toy_id: toyId, 
-            image_url: publicUrl 
+        const { error: updateError } = await supabase.from("toys").update(updateData).eq("id", toyId);
+        if (updateError) {
+          alert("Error updating toy: " + updateError.message);
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Update labels
+        await supabase.from("toy_labels").delete().eq("toy_id", toyId);
+        for (let labelName of selectedLabels) {
+          if (!labelName?.trim()) continue;
+          let label = labels.find(l => l.name === labelName);
+          let labelId = label?.id;
+          if (!labelId) {
+            const { data: newLabel } = await supabase.from("labels").insert([{ name: labelName }]).select().single();
+            labelId = newLabel?.id;
           }
-        ]);
-      }
-
-      // Handle labels
-      for (let labelName of selectedLabels) {
-        if (!labelName) continue;
-        let label = labels.find((l) => l.name === labelName);
-        let labelId = label?.id;
-
-        if (!labelId) {
-          const { data: newLabel } = await supabase
-            .from("labels")
-            .insert([{ name: labelName }])
-            .select()
-            .single();
-          labelId = newLabel.id;
+          if (labelId) await supabase.from("toy_labels").insert([{ toy_id: toyId, label_id: labelId }]);
         }
 
-        await supabase.from("toy_labels").insert([{ toy_id: toyId, label_id: labelId }]);
+        // Upload new additional images
+        for (let file of additionalImages) {
+          const filePath = `${toyId}/additional-${Date.now()}-${file.name}`;
+          const { error: uploadError } = await supabase.storage.from("toy-images").upload(filePath, file);
+          if (uploadError) {
+            console.error("Error uploading additional image:", uploadError);
+            continue;
+          }
+          const { data: publicUrlData } = supabase.storage.from("toy-images").getPublicUrl(filePath);
+          await supabase.from("toy_images").insert([{ toy_id: toyId, image_url: publicUrlData.publicUrl }]);
+        }
+
+        alert("✅ Toy updated successfully!");
+        navigate(`/toy/${toyId}`);
+
+      } else {
+        // CREATE new toy
+        const insertData = {
+          ...formValues,
+          custom_fields: custom_fields_json,
+          primary_image_url: primaryImageUrl,
+          user_id: user.id,
+        };
+        const { data: toyData, error: toyError } = await supabase.from("toys").insert([insertData]).select().single();
+        if (toyError) {
+          alert("Error adding toy: " + toyError.message);
+          setIsSubmitting(false);
+          return;
+        }
+        const newToyId = toyData.id;
+
+        // Move primary image from temp to final location if it was uploaded to temp
+        if (primaryImage && primaryImageUrl.includes('temp/')) {
+          const tempPath = `temp/${Date.now()}-${primaryImage.name}`;
+          const newPrimaryImagePath = `${newToyId}/primary-${Date.now()}-${primaryImage.name}`;
+          
+          const { error: moveError } = await supabase.storage
+            .from("toy-images")
+            .move(tempPath, newPrimaryImagePath);
+
+          if (!moveError) {
+            const { data: newPrimaryUrlData } = supabase.storage
+              .from("toy-images")
+              .getPublicUrl(newPrimaryImagePath);
+
+            await supabase
+              .from("toys")
+              .update({ primary_image_url: newPrimaryUrlData.publicUrl })
+              .eq("id", newToyId);
+          }
+        }
+
+        // Upload additional images
+        for (let file of additionalImages) {
+          const filePath = `${newToyId}/additional-${Date.now()}-${file.name}`;
+          const { error: uploadError } = await supabase.storage.from("toy-images").upload(filePath, file);
+          if (uploadError) continue;
+          const { data: publicUrlData } = supabase.storage.from("toy-images").getPublicUrl(filePath);
+          await supabase.from("toy_images").insert([{ toy_id: newToyId, image_url: publicUrlData.publicUrl }]);
+        }
+
+        // Insert labels
+        for (let labelName of selectedLabels) {
+          if (!labelName?.trim()) continue;
+          let label = labels.find(l => l.name === labelName);
+          let labelId = label?.id;
+          if (!labelId) {
+            const { data: newLabel } = await supabase.from("labels").insert([{ name: labelName }]).select().single();
+            labelId = newLabel?.id;
+          }
+          if (labelId) await supabase.from("toy_labels").insert([{ toy_id: newToyId, label_id: labelId }]);
+        }
+
+        alert("✅ Toy added successfully!");
+        resetForm();
+        navigate("/");
       }
-
-      alert("✅ Toy added successfully with images!");
-
-      // Reset form and redirect
-      e.target.reset();
-      setCustomFields([{ key: "", value: "" }]);
-      setSelectedLabels([]);
-      setPrimaryImage(null);
-      setAdditionalImages([]);
-      navigate("/");
 
     } catch (error) {
       console.error("Unexpected error:", error);
@@ -206,232 +357,79 @@ export default function ToyForm() {
     }
   };
 
-  const handleCancel = () => {
-    if (window.confirm("Are you sure you want to cancel? Any unsaved changes will be lost.")) {
-      navigate("/");
-    }
-  };
-
-  // --- UI STYLES (same as before) ---
-
-  const pageStyle = {
-    minHeight: "100vh",
-    backgroundColor: "#fffbe6",
-    padding: "20px",
-    fontFamily: "'Comic Sans MS', cursive, sans-serif",
-  };
-
-  const containerStyle = {
-    maxWidth: "800px",
-    margin: "0 auto",
-  };
-
-  const formStyle = {
-    display: "flex",
-    flexDirection: "column",
-    gap: "20px",
-    padding: "25px",
-    backgroundColor: "#fff",
-    border: "4px solid #000",
-    borderRadius: "16px",
-    boxShadow: "8px 8px 0 #000",
-  };
-
-  const headerStyle = {
-    fontFamily: "'Bangers', cursive",
-    fontSize: "clamp(28px, 6vw, 42px)",
-    color: "#ff4d4d",
-    textShadow: "2px 2px 0 #000",
-    marginBottom: "10px",
-    textAlign: 'center',
-  };
-
-  const subHeaderStyle = {
-    fontFamily: "'Bangers', cursive",
-    fontSize: "clamp(20px, 4vw, 28px)",
-    color: "#000",
-    borderBottom: '3px dashed #ff4d4d',
-    paddingBottom: '5px',
-    marginBottom: '15px',
-    marginTop: '25px',
-  };
-
-  const inputBaseStyle = {
-    padding: "12px 16px",
-    borderRadius: "8px",
-    border: "3px solid #000",
-    fontSize: "16px",
-    fontFamily: "'Comic Sans MS', cursive, sans-serif",
-    boxShadow: "3px 3px 0 #000",
-    width: "100%",
-    boxSizing: 'border-box',
-  };
-
-  const requiredFieldStyle = {
-    ...inputBaseStyle,
-    borderColor: "#ff4d4d",
-    backgroundColor: "#fff0f0"
-  };
-
-  const buttonStyle = {
-    padding: "12px 16px",
-    borderRadius: "8px",
-    border: "3px solid #000",
-    fontSize: "16px",
-    fontFamily: "'Comic Sans MS', cursive, sans-serif",
-    cursor: "pointer",
-    fontWeight: "bold",
-    transition: 'all 0.1s',
-    boxShadow: "4px 4px 0 #000",
-    marginTop: '10px',
-  };
-
-  const primaryButtonStyle = {
-    ...buttonStyle,
-    backgroundColor: "#ffcc00",
-    color: "#000",
-    fontSize: '18px',
-    padding: '14px 20px',
-  };
-
-  const secondaryButtonStyle = {
-    ...buttonStyle,
-    backgroundColor: "#33ccff",
-    color: "#000",
-  };
-
-  const cancelButtonStyle = {
-    ...buttonStyle,
-    backgroundColor: "#ff6b6b",
-    color: "#000",
-  };
-
-  const removeButtonStyle = {
-    ...buttonStyle,
-    backgroundColor: "#ff4d4d",
-    color: "#fff",
-    padding: '5px 10px',
-    fontSize: '12px',
-  };
-
-  const buttonContainerStyle = {
-    display: 'flex',
-    gap: '15px',
-    justifyContent: 'center',
-    marginTop: '20px',
-  };
-
-  const imagePreviewStyle = {
-    display: 'inline-block',
-    margin: '5px',
-    padding: '5px',
-    border: '2px solid #000',
-    borderRadius: '8px',
-    backgroundColor: '#fff',
-  };
-
-  // --- JSX RENDER ---
+  if (isLoading && isEditMode) return <div className="toyform-page">Loading...</div>;
 
   return (
-    <div style={pageStyle}>
-      <div style={containerStyle}>
-        <form onSubmit={handleSubmit} style={formStyle}>
-          <h1 style={headerStyle}>
-            <span role="img" aria-label="boom">💥</span> MISSION LOG: NEW TOY ACQUIRED <span role="img" aria-label="boom">💥</span>
+    <div className="toyform-page">
+      <div className="toyform-container">
+        <form onSubmit={handleSubmit} className="toyform-form">
+          <h1 className="toyform-header">
+            {isEditMode ? "✏️ MISSION UPDATE: EDIT TOY" : "💥 MISSION LOG: NEW TOY ACQUIRED 💥"}
           </h1>
 
-          {/* Main Details */}
-          <h4 style={subHeaderStyle}>Primary Details</h4>
-          <input name="name" placeholder="Name: Toy Name (REQUIRED)" required style={requiredFieldStyle} />
-          <input name="type" placeholder="Type: Funko Pop, LEGO, Figure, etc. (REQUIRED)" required style={requiredFieldStyle} />
-          
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-            <input name="series" placeholder="Series / Franchise" style={inputBaseStyle} />
-            <input name="brand" placeholder="Brand / Manufacturer" style={inputBaseStyle} />
+          <h4 className="toyform-subheader">Primary Details</h4>
+          <input name="name" placeholder="Name: Toy Name (REQUIRED)" required className="input required" defaultValue={existingToy?.name || ""}/>
+          <input name="type" placeholder="Type: Funko Pop, LEGO, Figure, etc. (REQUIRED)" required className="input required" defaultValue={existingToy?.type || ""}/>
+          <div className="grid-2">
+            <input name="series" placeholder="Series / Franchise" className="input" defaultValue={existingToy?.series || ""}/>
+            <input name="brand" placeholder="Brand / Manufacturer" className="input" defaultValue={existingToy?.brand || ""}/>
+          </div>
+          <div className="grid-2">
+            <input name="code_number" placeholder="Code Number / SKU" className="input" defaultValue={existingToy?.code_number || ""}/>
+            <input name="quantity" type="number" placeholder="Quantity (e.g., 1)" defaultValue={existingToy?.quantity || 1} min={1} className="input"/>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-            <input name="code_number" placeholder="Code Number / SKU" style={inputBaseStyle} />
-            <input name="quantity" type="number" placeholder="Quantity (e.g., 1)" defaultValue={1} min={1} style={inputBaseStyle} />
+          <h4 className="toyform-subheader">Condition & Variant Info</h4>
+          <div className="grid-2">
+            <input name="condition" placeholder="Condition (Mint, Used, Sealed)" className="input" defaultValue={existingToy?.condition || ""}/>
+            <input name="color_variant" placeholder="Color / Variant" className="input" defaultValue={existingToy?.color_variant || ""}/>
           </div>
 
-          {/* Condition & Variants */}
-          <h4 style={subHeaderStyle}>Condition & Variant Info</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-            <input name="condition" placeholder="Condition (Mint, Used, Sealed)" style={inputBaseStyle} />
-            <input name="color_variant" placeholder="Color / Variant" style={inputBaseStyle} />
+          <h4 className="toyform-subheader">Acquisition Details</h4>
+          <div className="grid-2">
+            <input name="purchase_date" type="date" className="input" defaultValue={existingToy?.purchase_date || ""}/>
+            <input name="price" type="number" step="0.01" placeholder="Price (e.g., 25.99)" className="input" defaultValue={existingToy?.price || ""}/>
           </div>
-          
-          {/* Purchase Details */}
-          <h4 style={subHeaderStyle}>Acquisition Details</h4>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-            <input name="purchase_date" type="date" style={inputBaseStyle} />
-            <input name="price" type="number" step="0.01" placeholder="Price (e.g., 25.99)" style={inputBaseStyle} />
-          </div>
-          <input name="purchase_location" placeholder="Purchase Location (Store Name, Website)" style={inputBaseStyle} />
-          
-          {/* Notes */}
-          <h4 style={subHeaderStyle}>Field Notes</h4>
-          <textarea name="notes" placeholder="Notes: Details on accessories, damage, or fun facts!" rows={4} style={{...inputBaseStyle, resize: 'vertical'}} />
+          <input name="purchase_location" placeholder="Purchase Location (Store Name, Website)" className="input" defaultValue={existingToy?.purchase_location || ""}/>
 
-          {/* PRIMARY IMAGE (Required) */}
-          <h4 style={subHeaderStyle}>
-            <span role="img" aria-label="camera">📸</span> Primary Image (REQUIRED)
-          </h4>
-          <input 
-            type="file" 
-            accept="image/*" 
-            onChange={handlePrimaryImageChange} 
-            required
-            style={{...requiredFieldStyle, padding: '10px', height: 'auto'}}
-          />
+          <h4 className="toyform-subheader">Field Notes</h4>
+          <textarea name="notes" placeholder="Notes: Details on accessories, damage, or fun facts!" rows={4} className="input textarea" defaultValue={existingToy?.notes || ""}/>
+
+          <h4 className="toyform-subheader">📸 Primary Image {!isEditMode && "(REQUIRED)"}</h4>
+          <input type="file" accept="image/*" onChange={handlePrimaryImageChange} required={!isEditMode} className="input file"/>
+          {existingPrimaryImageUrl && !primaryImage && (
+            <div className="image-preview-block">
+              <p className="image-preview-title">Current Primary Image</p>
+              <div className="image-preview">
+                <img src={existingPrimaryImageUrl} alt="Primary preview"/>
+                <p>🏆 CURRENT PRIMARY IMAGE</p>
+              </div>
+            </div>
+          )}
           {primaryImage && (
-            <div style={{marginTop: '10px'}}>
-              <p style={{fontSize: '14px', color: '#000', fontWeight: 'bold'}}>
-                Primary Image Selected: {primaryImage.name} ✅
-              </p>
-              <div style={imagePreviewStyle}>
-                <img 
-                  src={URL.createObjectURL(primaryImage)} 
-                  alt="Primary preview" 
-                  style={{maxWidth: '200px', maxHeight: '200px', border: '2px solid #ffcc00'}}
-                />
-                <p style={{textAlign: 'center', margin: '5px 0 0 0', fontSize: '12px'}}>
-                  🏆 PRIMARY IMAGE
-                </p>
+            <div className="image-preview-block">
+              <p className="image-preview-title">{isEditMode ? "New Primary Image Selected: " : "Primary Image Selected: "} {primaryImage.name} ✅</p>
+              <div className="image-preview">
+                <img src={URL.createObjectURL(primaryImage)} alt="Primary preview"/>
+                <p>🏆 {isEditMode ? "NEW PRIMARY IMAGE" : "PRIMARY IMAGE"}</p>
               </div>
             </div>
           )}
 
-          {/* ADDITIONAL IMAGES (Optional) */}
-          <h4 style={subHeaderStyle}>
-            <span role="img" aria-label="images">🖼️</span> Additional Images (Optional)
-          </h4>
-          <input 
-            type="file" 
-            multiple 
-            accept="image/*" 
-            onChange={handleAdditionalImagesChange} 
-            style={{...inputBaseStyle, padding: '10px', height: 'auto'}}
-          />
-          {additionalImages.length > 0 && (
-            <div style={{marginTop: '10px'}}>
-              <p style={{fontSize: '14px', color: '#000', fontWeight: 'bold'}}>
-                {additionalImages.length} additional image(s) ready for upload! 📸
-              </p>
+          <h4 className="toyform-subheader">🖼️ Additional Images (Optional)</h4>
+          <input type="file" multiple accept="image/*" onChange={handleAdditionalImagesChange} className="input file"/>
+          {existingAdditionalImages.length > 0 && (
+            <div className="image-preview-block">
+              <p className="image-preview-title">Current Additional Images</p>
               <div>
-                {additionalImages.map((file, index) => (
-                  <div key={index} style={imagePreviewStyle}>
-                    <img 
-                      src={URL.createObjectURL(file)} 
-                      alt={`Additional preview ${index + 1}`} 
-                      style={{maxWidth: '150px', maxHeight: '150px'}}
-                    />
-                    <div style={{textAlign: 'center', marginTop: '5px'}}>
+                {existingAdditionalImages.map((image, index) => (
+                  <div key={image.id} className="image-preview">
+                    <img src={image.image_url} alt={`Additional ${index + 1}`}/>
+                    <div>
                       <button 
                         type="button" 
-                        onClick={() => removeAdditionalImage(index)}
-                        style={removeButtonStyle}
+                        onClick={() => removeExistingAdditionalImage(image.id, image.image_url)} 
+                        className="btn remove"
                       >
                         Remove
                       </button>
@@ -441,106 +439,42 @@ export default function ToyForm() {
               </div>
             </div>
           )}
-
-          {/* Custom Fields */}
-          <h4 style={subHeaderStyle}>Custom Specs</h4>
-          {customFields.map((f, idx) => (
-            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 50px', gap: '10px', alignItems: 'center' }}>
-              <input
-                placeholder="Key (e.g., 'Artist')"
-                value={f.key}
-                onChange={(e) => handleCustomFieldChange(idx, 'key', e.target.value)}
-                style={inputBaseStyle}
-              />
-              <input
-                placeholder="Value (e.g., 'Kaws')"
-                value={f.value}
-                onChange={(e) => handleCustomFieldChange(idx, 'value', e.target.value)}
-                style={inputBaseStyle}
-              />
-              <button 
-                type="button" 
-                style={{
-                  ...buttonStyle, 
-                  background: '#ff4d4d', 
-                  padding: '8px', 
-                  fontSize: '18px',
-                  height: '44px'
-                }}
-                onClick={() => setCustomFields(customFields.filter((_, i) => i !== idx))}
-              >
-                ✕
-              </button>
+          {additionalImages.length > 0 && (
+            <div className="image-preview-block">
+              <p className="image-preview-title">{additionalImages.length} new additional image(s) ready for upload! 📸</p>
+              <div>
+                {additionalImages.map((file, index) => (
+                  <div key={index} className="image-preview">
+                    <img src={URL.createObjectURL(file)} alt={`Additional preview ${index + 1}`}/>
+                    <div>
+                      <button type="button" onClick={() => removeAdditionalImage(index)} className="btn remove">Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-          <button 
-            type="button" 
-            onClick={addCustomField} 
-            style={secondaryButtonStyle}
-          >
-            <span role="img" aria-label="sparkle">✨</span> Add Custom Field
-          </button>
-
-          {/* Labels */}
-          <h4 style={subHeaderStyle}>Tags & Categories</h4>
-          <input
-            placeholder="Comma-separated labels (e.g., Vinyl, Limited Edition, Exclusive)"
-            value={selectedLabels.join(", ")}
-            onChange={(e) => setSelectedLabels(e.target.value.split(",").map((l) => l.trim()))}
-            style={inputBaseStyle}
-          />
-          {labels.length > 0 && (
-            <p style={{fontSize: '12px', margin: '-10px 0 0 0', color: '#666'}}>
-              Existing: {labels.slice(0, 5).map(l => l.name).join(', ')}{labels.length > 5 ? '...' : ''}
-            </p>
           )}
 
-          {/* Button Container */}
-          <div style={buttonContainerStyle}>
-            <button 
-              type="button" 
-              onClick={handleCancel}
-              style={cancelButtonStyle}
-              disabled={isSubmitting}
-            >
-              <span role="img" aria-label="cancel">❌</span> Cancel
-            </button>
-            <button 
-              type="submit" 
-              style={{
-                ...primaryButtonStyle,
-                opacity: isSubmitting ? 0.7 : 1,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer'
-              }}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                "🔄 Uploading..."
-              ) : (
-                <>
-                  <span role="img" aria-label="send">🚀</span> SUBMIT TOY REPORT
-                </>
-              )}
+          <h4 className="toyform-subheader">Custom Specs</h4>
+          {customFields.map((f, idx) => (
+            <div key={idx} className="custom-field-row">
+              <input placeholder="Key (e.g., 'Artist')" value={f.key} onChange={(e) => handleCustomFieldChange(idx, "key", e.target.value)} className="input"/>
+              <input placeholder="Value (e.g., 'Kaws')" value={f.value} onChange={(e) => handleCustomFieldChange(idx, "value", e.target.value)} className="input"/>
+              <button type="button" className="btn small remove" onClick={() => setCustomFields(customFields.filter((_, i) => i !== idx))}>✕</button>
+            </div>
+          ))}
+          <button type="button" onClick={addCustomField} className="btn secondary">✨ Add Custom Field</button>
+
+          <h4 className="toyform-subheader">Tags & Categories</h4>
+          <input placeholder="Comma-separated labels (e.g., Vinyl, Limited Edition, Exclusive)" value={selectedLabels.join(", ")} onChange={(e) => setSelectedLabels(e.target.value.split(",").map((l) => l.trim()))} className="input"/>
+          {labels.length > 0 && (<p className="labels-existing">Existing: {labels.slice(0, 5).map((l) => l.name).join(", ")}{labels.length > 5 ? "..." : ""}</p>)}
+
+          <div className="button-container">
+            <button type="button" onClick={handleCancel} className="btn cancel" disabled={isSubmitting}>❌ Cancel</button>
+            <button type="submit" className={`btn primary ${isSubmitting ? "disabled" : ""}`} disabled={isSubmitting}>
+              {isSubmitting ? "🔄 Processing..." : isEditMode ? "💾 UPDATE TOY REPORT" : "🚀 SUBMIT TOY REPORT"}
             </button>
           </div>
-
-          {/* Additional CSS for responsive design */}
-          <style>{`
-            @media (max-width: 768px) {
-              div[style*="gridTemplateColumns"] {
-                grid-template-columns: 1fr !important;
-              }
-              
-              .button-container {
-                flex-direction: column;
-              }
-            }
-            
-            button:active:not(:disabled) {
-              transform: translate(2px, 2px);
-              box-shadow: 2px 2px 0 #000 !important;
-            }
-          `}</style>
         </form>
       </div>
     </div>
