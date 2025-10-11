@@ -94,7 +94,7 @@ export default function FilterSidebar({
       {/* Sidebar */}
       <div className="filter-sidebar">
         <div className="sidebar-header">
-          <h2>⚡ FILTER WEAPONS ⚡</h2>
+          <h2>⚡ FILTER WEAPONS </h2>
           <button className="sidebar-close-button" onClick={onClose}>
             ✕
           </button>
@@ -153,9 +153,9 @@ export default function FilterSidebar({
               </div>
               
               <div className="slider-values">
-                <span className="slider-value">${priceRange[0]}</span>
+                <span className="slider-value">£{priceRange[0]}</span>
                 <span className="slider-separator">-</span>
-                <span className="slider-value">${priceRange[1]}</span>
+                <span className="slider-value">£{priceRange[1]}</span>
               </div>
             </div>
 

@@ -387,11 +387,12 @@ export default function ToyCollectionPage({ onLogout }) {
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency: 'GBP'
+  }).format(amount);
+};
+
 
   // Active filters count (excluding sortBy and default "newest" value)
 // ✅ Only count *real* filters, not sortBy or defaults

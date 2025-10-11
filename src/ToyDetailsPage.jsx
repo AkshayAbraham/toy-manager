@@ -44,9 +44,9 @@ export default function ToyDetailsPage() {
 
   const formatCurrency = (amt) =>
     amt
-      ? new Intl.NumberFormat("en-US", {
+      ? new Intl.NumberFormat("en-GB", {
           style: "currency",
-          currency: "USD",
+          currency: "GBP",
         }).format(amt)
       : "Not specified";
 
